@@ -9,8 +9,9 @@ class City:
         self.CityName = CityName
         self.Buildings = {}  # dictionary where the key is the Building ID and the value are the building objects
         self.Crossroads = {}
-        self.Streets = {}
         self.WaitingAreas = {}
+        self.Streets = {}
+
 
     def loadCrossroadsFromShapefile(self, path):
         driver = ogr.GetDriverByName("ESRI Shapefile")
@@ -64,11 +65,10 @@ class City:
             street_obj.descriptions.append(street.GetField('CR317_De_6'))
 
             # Endpoints
-            if (
-                    street_geom.GetGeometryName() == 'LINESTRING'):  # n.b. if they are multilinestring it means that we don't have the full street so we can't consider it
+            if (street_geom.GetGeometryName() == 'LINESTRING'):  # n.b. if they are multilinestring it means that we don't have the full street so we can't consider it
                 first = street_geom.GetPoint(0)
                 last = street_geom.GetPoint(street_geom.GetPointCount() - 1)
-                street_obj.endpoints = (first, last)
+                street_obj.endpoints = ((first[0], first[1]), (last[0],last[1]))
 
             self.Streets[streetID] = street_obj
 
@@ -114,6 +114,8 @@ class City:
 
             self.Buildings[buildingID] = building_obj  # Add the the building in the list of the buidings in the city
             self.Streets[streetID].listOfBuildings.append(building_obj)
+            if (building_obj.risk > self.Streets[streetID].risk):
+                self.Streets[streetID].risk = building_obj.risk
 
     def addBuildingsGeometryFromShapefile(self, path):
         driver = ogr.GetDriverByName("ESRI Shapefile")
@@ -221,14 +223,18 @@ class Street:
         self.length = None
         self.endpoints = None
         self.listOfBuildings = []
+        self.risk = -1
 
     def divideStreetWithBuildings(self):
         points = []
-        points.append(self.endpoints[0])
-        for building in self.listOfBuildings:
-            points.append(building.position)
-        points.append(self.endpoints[1])
-        return points
+        if (self.endpoints):
+            points.append((self.endpoints[0][0],self.endpoints[0][1]))
+            print(self.wtkGeometry)
+            for building in self.listOfBuildings:
+                print(building.position)
+                points.append(building.position)
+            points.append((self.endpoints[1][0],self.endpoints[1][1]))
+            return points
 
     def plot(self, color):
         geom = ogr.CreateGeometryFromWkt(self.wtkGeometry)
@@ -280,15 +286,13 @@ if __name__ == '__main__':
     Sulmona.loadWaitingAreasFromShapefile(waiting_areas_pos_path)
     Sulmona.addWaitingAreasGeometryFromShapefile(waiting_areas_path)
 
-    for street in Sulmona.Streets:
-        print(Sulmona.Streets[street].descriptions)
+    for streetID in Sulmona.Streets:
+        street_obj = Sulmona.Streets[streetID]
+        street_obj.divideStreetWithBuildings()
+        #print(Sulmona.Streets[streetID].descriptions)
+
+
 
     #for building in Sulmona.Buildings:
      #   print (Sulmona.Buildings[building].descriptions)
 
-
-
-    # print (Sulmona.Streets[533439106.0].width)
-
-    # Sulmona.plotCity()
-    # plt.show()
