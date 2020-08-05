@@ -1,6 +1,8 @@
 from osgeo import ogr, osr
 import os
 from visuallayer import *
+from shapely.ops import split, nearest_points
+from shapely.geometry import Point, LineString, MultiPoint
 
 
 class City:
@@ -27,7 +29,7 @@ class City:
 
             # Position
             crossroad_geom = crossroad.GetGeometryRef()
-            transform_coordinate_to_WGS84(crossroad_geom, crossroads_srs)
+            #transform_coordinate_to_WGS84(crossroad_geom, crossroads_srs)
             crossroad_obj.setPosition((crossroad_geom.GetX(), crossroad_geom.GetY()))
 
             self.Crossroads[crossroadID] = crossroad_obj  # Add the the building in the list of the buidings in the city
@@ -45,7 +47,7 @@ class City:
             street_geom = street.GetGeometryRef()
 
             street_obj = Street(streetID, streetName)  # create new street
-            transform_coordinate_to_WGS84(street_geom, streets_srs)
+            #transform_coordinate_to_WGS84(street_geom, streets_srs)
             street_obj.wtkGeometry = street_geom.ExportToWkt()  # geoemtry of the stree
             street_obj.length = street.GetField('SHAPE_Leng')  # length of the street
             width_string = street.GetField('CR317_De_1')  # width of the street
@@ -85,7 +87,7 @@ class City:
 
             # Position
             building_geom = building.GetGeometryRef()
-            transform_coordinate_to_WGS84(building_geom, building_pos_srs)
+            #transform_coordinate_to_WGS84(building_geom, building_pos_srs)
             building_obj.setPosition((building_geom.GetX(), building_geom.GetY()))
 
             # Associated street ID
@@ -98,7 +100,7 @@ class City:
             if (risk_string in risk_type):
                 building_obj.risk = risk_type[risk_string]
             else:
-                building_obj.risk = -1
+                building_obj.risk = 0
 
             streetID = building.GetField('CR01_STR')
 
@@ -129,7 +131,7 @@ class City:
             buildingID = building.GetField('CR01_IDOBJ')
             building_geom = building.GetGeometryRef()
             # self.Buildings[buildingID].area = building_geom.Area()
-            transform_coordinate_to_WGS84(building_geom, building_srs)
+            #transform_coordinate_to_WGS84(building_geom, building_srs)
             self.Buildings[buildingID].wtkGeometry = building_geom.ExportToWkt()
 
     def loadWaitingAreasFromShapefile(self, path):
@@ -144,7 +146,7 @@ class City:
             w_area_obj = WaitingArea(wAreaID)  # new waiting area
 
             w_area_geom = w_area.GetGeometryRef()
-            transform_coordinate_to_WGS84(w_area_geom, w_areas_srs)
+            #transform_coordinate_to_WGS84(w_area_geom, w_areas_srs)
             w_area_obj.setPosition((w_area_geom.GetX(), w_area_geom.GetY()))
             # wAreaGeom = w_area.GetGeometryRef()
 
@@ -166,7 +168,7 @@ class City:
             wAreaID = wArea.GetField('Id')
             w_area_geom = wArea.GetGeometryRef()
             # self.WaitingAreas[wAreaID].area = w_area_geom.Area()
-            transform_coordinate_to_WGS84(w_area_geom, w_areas_srs)
+            #transform_coordinate_to_WGS84(w_area_geom, w_areas_srs)
             self.WaitingAreas[wAreaID].wtkGeometry = w_area_geom.ExportToWkt()
 
     def getBuildingsFromStreetID(self, streetID):
@@ -223,18 +225,27 @@ class Street:
         self.length = None
         self.endpoints = None
         self.listOfBuildings = []
-        self.risk = -1
+        self.risk = 0
 
     def divideStreetWithBuildings(self):
         points = []
+        buildings = []
         if (self.endpoints):
             points.append((self.endpoints[0][0],self.endpoints[0][1]))
-            print(self.wtkGeometry)
+            orig = Point(self.endpoints[0][0],self.endpoints[0][1])
             for building in self.listOfBuildings:
-                print(building.position)
-                points.append(building.position)
+                buildings.append(Point(building.position))
+            destinations = MultiPoint(points=list(buildings))
+
+            while (destinations):
+                nearest_geoms = nearest_points(orig, destinations)
+                nearest_point= nearest_geoms[1]
+                points.append((nearest_point.x, nearest_point.y))
+                destinations = destinations.difference(nearest_point)
+                orig=nearest_point
+
             points.append((self.endpoints[1][0],self.endpoints[1][1]))
-            return points
+        return points
 
     def plot(self, color):
         geom = ogr.CreateGeometryFromWkt(self.wtkGeometry)
@@ -290,8 +301,6 @@ if __name__ == '__main__':
         street_obj = Sulmona.Streets[streetID]
         street_obj.divideStreetWithBuildings()
         #print(Sulmona.Streets[streetID].descriptions)
-
-
 
     #for building in Sulmona.Buildings:
      #   print (Sulmona.Buildings[building].descriptions)

@@ -4,23 +4,27 @@ import matplotlib.pyplot as plt
 
 def addNode(G, type, object):
     if (type == 'building'):
-        G.add_node(object.position, node_type=type, building_type=object.buildingType, risk=object.risk, n_people=object.nPeople)
+        G.add_node(str(object.position), pos = object.position, nodeType=type, buildingType=str(object.buildingType), risk=object.risk, nPeople=object.nPeople)
     if (type == 'crossroad'):
-        G.add_node(object.position, node_type=type)
+        G.add_node(str(object.position), pos = object.position, nodeType=type)
     if (type =='waiting_area'):
-        G.add_node(object.position, node_type = type, capacity = object.users_capacity)
-
+        G.add_node(str(object.position), pos = object.position, nodeType = type, capacity = object.users_capacity)
 
 def addEdge(G, type, object):
-    if (type == 'street'):
-        if (object.endpoints):
-            if(G.has_node(object.endpoints[0]) and G.has_node(object.endpoints[1])):
-                G.add_edge(object.endpoints[0], object.endpoints[1], edge_type = type, width = object.width, length = object.length, risk=object.risk, buildings = object.listOfBuildings)
-
-    if (type == 'halfstreet'):
+    if (object.endpoints and G.has_node(str(object.endpoints[0])) and G.has_node(str(object.endpoints[1]))):
+        if (type == 'street'):
+            G.add_edge(str(object.endpoints[0]), str(object.endpoints[1]), edgeType = type, width = object.width, length = object.length, risk=object.risk, buildings = buildingsToString(object.listOfBuildings))
+        if (type == 'halfstreet'):
             points = object.divideStreetWithBuildings()
-            for i in range (0, len(points)-1):
-                G.add_edge(points[i], points[i+1], edge_type = type, width = object.width, risk=object.risk)
+            if (points):
+                for i in range (0, len(points)-1):
+                    G.add_edge(str(points[i]), str(points[i+1]), edgeType = type, width = object.width, risk=object.risk)
+
+def buildingsToString(listOfBuildings):
+    buildings = []
+    for building in listOfBuildings:
+        buildings.append(str(building.ID))
+    return buildings
 
 def plotCityGraph(Graph):
     # Plotting graph
@@ -28,16 +32,17 @@ def plotCityGraph(Graph):
     buildings = []
     waiting_areas = []
     for node, data in Graph.nodes(data=True):
-        if (data['node_type'] == 'crossroad'):
-            crossroads.append(node)
-        if (data['node_type'] == 'building'):
-            buildings.append(node)
-        if (data['node_type'] == 'waiting_area'):
-            waiting_areas.append(node)
+        if (data):
+            if (data['nodeType'] == 'crossroad'):
+                crossroads.append(node)
+            if (data['nodeType'] == 'building'):
+                buildings.append(node)
+            if (data['nodeType'] == 'waiting_area'):
+                waiting_areas.append(node)
+        else:
+            print('no nodeType in this node')
 
-    pos = {}
-    for node in Graph.nodes():
-        pos[node] = node
+    pos = nx.get_node_attributes(Graph, 'pos')
 
     nx.draw_networkx_nodes(Graph, pos, nodelist=crossroads, node_size=5, node_color='#ff6666', node_shape='o')
     nx.draw_networkx_nodes(Graph, pos, nodelist=buildings, node_size=5, node_color='#1f78b4', node_shape='o')
@@ -46,9 +51,38 @@ def plotCityGraph(Graph):
     nx.draw_networkx_edges(Graph, pos, edgelist=Graph.edges())
     plt.show()
 
+def loadCompleteGraph():
+    Graph = nx.Graph()
+
+    for crossroad in Sulmona.Crossroads:
+        addNode(Graph, 'crossroad', Sulmona.Crossroads[crossroad])
+    for building in Sulmona.Buildings:
+        addNode(Graph, 'building', Sulmona.Buildings[building])
+    for w_area in Sulmona.WaitingAreas:
+        addNode(Graph, 'waiting_area', Sulmona.WaitingAreas[w_area])
+    for street in Sulmona.Streets:
+        addEdge(Graph, 'street', Sulmona.Streets[street])
+        addEdge(Graph, 'halfstreet', Sulmona.Streets[street])
+    return Graph
+
+def loadCrossroadsGraph():
+    Graph = nx.Graph()
+
+    for crossroad in Sulmona.Crossroads:
+        addNode(Graph, 'crossroad', Sulmona.Crossroads[crossroad])
+    for street in Sulmona.Streets:
+        addEdge(Graph, 'street', Sulmona.Streets[street])
+
+    return Graph
+
 def saveCityGraph(Graph, name):
     nx.write_adjlist(Graph, str(name)+'.adjlist')
-   #nx.write_adjlist(Graph, 'data/'+str(name)+'.adjlist')
+    nx.write_gpickle(Graph, str(name)+'.gpickle')
+
+def loadCityGraph(name):
+    #G=nx.read_adjlist(str(name) + '.adjlist')
+    G=nx.read_gpickle(str(name) + '.gpickle')
+    return G
 
 Sulmona = City('Sulmona')
 os.chdir('data') #working directory
@@ -72,25 +106,20 @@ Sulmona.addBuildingsGeometryFromShapefile(buildings_path)
 Sulmona.loadWaitingAreasFromShapefile(waiting_areas_pos_path)
 Sulmona.addWaitingAreasGeometryFromShapefile(waiting_areas_path)
 
-#Creating Graph of Sulmona
-SulmonaGraph = nx.Graph()
+CompleteGraph=loadCompleteGraph()
+CrossroadsGraph=loadCrossroadsGraph()
 
-for crossroad in Sulmona.Crossroads:
-    addNode(SulmonaGraph, 'crossroad', Sulmona.Crossroads[crossroad])
-#for building in Sulmona.Buildings:
-#    addNode(SulmonaGraph, 'building', Sulmona.Buildings[building])
-#for w_area in Sulmona.WaitingAreas:
-#    addNode(SulmonaGraph, 'waiting_area', Sulmona.WaitingAreas[w_area])
-for street in Sulmona.Streets:
-    addEdge(SulmonaGraph, 'street', Sulmona.Streets[street])
-    #addEdge(SulmonaGraph, 'halfstreeet', Sulmona.Streets[street])
+plotCityGraph(CompleteGraph)
+plotCityGraph(CrossroadsGraph)
 
-plotCityGraph(SulmonaGraph)
+saveCityGraph(CompleteGraph, 'completeGraph')
+saveCityGraph(CrossroadsGraph, 'crossroadsGraph')
 
-saveCityGraph(SulmonaGraph, 'crossroadsGraph')
+#print (CompleteGraph.number_of_edges())
+#print (CrossroadsGraph.number_of_edges())
+#G = loadCityGraph('crossroadsGraph')
 
-print (SulmonaGraph.degree)
-#for edge in SulmonaGraph.edges(data=True):
+#for edge in CompleteGraph.nodes(data=True):
 #    print(edge)
 
 
