@@ -84,42 +84,56 @@ def loadCityGraph(name):
     G=nx.read_gpickle(str(name) + '.gpickle')
     return G
 
-Sulmona = City('Sulmona')
-os.chdir('data') #working directory
+if __name__ == "__main__":
+    Sulmona = City('Sulmona')
+    os.chdir('data') #working directory
 
-buildings_pos_path='buildings/CR01G_EDIFICI_POS.shp' #position of the buildings' shapefile
-buildings_path='buildings/CR01G_EDIFICI.shp' #polygons that represent the buildings
-buildings_MSKClass_path='buildings/Classi_MSK.shp'
+    buildings_pos_path='buildings/CR01G_EDIFICI_POS.shp' #position of the buildings' shapefile
+    buildings_path='buildings/CR01G_EDIFICI.shp' #polygons that represent the buildings
+    buildings_MSKClass_path='buildings/Classi_MSK.shp'
 
-waiting_areas_path = 'waiting_areas/Aree di attesa.shp'
-waiting_areas_pos_path = 'waiting_areas/Aree_di_attesa_pos.shp'
+    waiting_areas_path = 'waiting_areas/Aree di attesa.shp'
+    waiting_areas_pos_path = 'waiting_areas/Aree_di_attesa_pos.shp'
 
-crossroads_path = 'streets/CR325G_GZ_STR_POS.shp'
-streets_path = 'streets/CR317G_EL_STR_TRAC.shp'
+    crossroads_path = 'streets/CR325G_GZ_STR_POS.shp'
+    streets_path = 'streets/CR317G_EL_STR_TRAC.shp'
 
+    census_areas_path = 'census_areas/sez_cens_2011_SULMO_con_dati.shp'
 
-Sulmona.loadCrossroadsFromShapefile(crossroads_path)
-Sulmona.loadStreetsFromShapefile(streets_path)
-Sulmona.loadBuildingsFromShapefile(buildings_pos_path)
-Sulmona.addBuildingsGeometryFromShapefile(buildings_path)
+    Sulmona.loadCrossroadsFromShapefile(crossroads_path)
+    Sulmona.loadStreetsFromShapefile(streets_path)
+    Sulmona.loadBuildingsFromShapefile(buildings_pos_path)
+    Sulmona.addBuildingsGeometryFromShapefile(buildings_path)
 
-Sulmona.loadWaitingAreasFromShapefile(waiting_areas_pos_path)
-Sulmona.addWaitingAreasGeometryFromShapefile(waiting_areas_path)
+    Sulmona.loadWaitingAreasFromShapefile(waiting_areas_pos_path)
+    Sulmona.addWaitingAreasGeometryFromShapefile(waiting_areas_path)
 
-CompleteGraph=loadCompleteGraph()
-CrossroadsGraph=loadCrossroadsGraph()
+    Sulmona.loadCensusAreasFromShapefile(census_areas_path)
 
-plotCityGraph(CompleteGraph)
-plotCityGraph(CrossroadsGraph)
+    CompleteGraph=loadCompleteGraph()
+    CrossroadsGraph=loadCrossroadsGraph()
 
-saveCityGraph(CompleteGraph, 'completeGraph')
-saveCityGraph(CrossroadsGraph, 'crossroadsGraph')
+    plotCityGraph(CompleteGraph)
+    plotCityGraph(CrossroadsGraph)
 
-#print (CompleteGraph.number_of_edges())
-#print (CrossroadsGraph.number_of_edges())
-#G = loadCityGraph('crossroadsGraph')
+    saveCityGraph(CompleteGraph, 'completeGraph')
+    saveCityGraph(CrossroadsGraph, 'crossroadsGraph')
 
-#for edge in CompleteGraph.nodes(data=True):
-#    print(edge)
+    #print (CompleteGraph.number_of_edges())
+    #print (CrossroadsGraph.number_of_edges())
+    #G = loadCityGraph('crossroadsGraph')
+
+    G = nx.read_gpickle('completeGraph.gpickle')
+    for node, data in G.nodes(data=True):
+        if data['nodeType']== 'building':
+            print(node, data)
+    #for node in CompleteGraph.nodes(data=True):
+    #    print(node)
+    #for edge in CompleteGraph.edges(data=True):
+     #   print(edge)
+
+    print(CompleteGraph.number_of_nodes())
+    print(CompleteGraph.number_of_edges())
+
 
 
