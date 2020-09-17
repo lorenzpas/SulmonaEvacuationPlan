@@ -3,7 +3,7 @@ import os
 from visuallayer import *
 from shapely.ops import split, nearest_points
 from shapely.geometry import Point, LineString, MultiPoint
-
+import osmnx as ox
 
 class City:
 
@@ -13,14 +13,31 @@ class City:
         self.Crossroads = {}
         self.WaitingAreas = {}
         self.Streets = {}
+        self.CensusAreas = {}
         self.srs = None
 
+    def setSRS(self, srs):
+        if  self.srs == None:
+            self.srs = srs
+            print('Added Spatial Reference System')
+        else:
+            if self.srs != srs:
+                #ToDo: update all the data already loaded
+                self.srs = srs
+                print('Updated Spatial Reference System')
 
     def loadCrossroadsFromShapefile(self, path):
         driver = ogr.GetDriverByName("ESRI Shapefile")
         crossroads_vector = driver.Open(path, 0)
         crossroads_layer = crossroads_vector.GetLayer(0)
         crossroads_srs = crossroads_layer.GetSpatialRef()
+        transformCoord = False
+        if (self.srs == None):
+            self.setSRS(crossroads_srs)
+        else:
+            if (crossroads_srs != self.srs):
+                transformCoord = True
+                transformation = osr.CoordinateTransformation(crossroads_srs, self.srs)
 
         for crossroad in crossroads_layer:
             crossroadID = crossroad.GetField('CR325_IDOB')
@@ -29,7 +46,9 @@ class City:
 
             # Position
             crossroad_geom = crossroad.GetGeometryRef()
-            #transform_coordinate_to_WGS84(crossroad_geom, crossroads_srs)
+
+            if (transformCoord):
+                crossroad_geom.Transform(transformation)
             crossroad_obj.setPosition((crossroad_geom.GetX(), crossroad_geom.GetY()))
 
             self.Crossroads[crossroadID] = crossroad_obj
@@ -40,6 +59,14 @@ class City:
         streets_layer = streets_vector.GetLayer(0)
         streets_srs = streets_layer.GetSpatialRef()
 
+        transformCoord = False
+        if (self.srs == None):
+            self.setSRS(streets_srs)
+        else:
+            if (streets_srs != self.srs):
+                transformCoord = True
+                transformation = osr.CoordinateTransformation(streets_srs, self.srs)
+
         for street in streets_layer:
             streetID = street.GetField('CR317_IDOB')
             streetName = street.GetField('CR317_Topo')
@@ -47,7 +74,8 @@ class City:
             street_geom = street.GetGeometryRef()
 
             street_obj = Street(streetID, streetName)  # create new street
-            #transform_coordinate_to_WGS84(street_geom, streets_srs)
+            if (transformCoord):
+                street_geom.Transform(transformation)
             street_obj.wtkGeometry = street_geom.ExportToWkt()  # geoemtry of the stree
             street_obj.length = street.GetField('SHAPE_Leng')  # length of the street
             width_string = street.GetField('CR317_De_1')  # width of the street
@@ -79,6 +107,15 @@ class City:
         buildings_pos_vector = driver.Open(path, 0)
         buildings_pos_layer = buildings_pos_vector.GetLayer(0)
         building_pos_srs = buildings_pos_layer.GetSpatialRef()
+
+        transformCoord = False
+        if (self.srs == None):
+            self.setSRS(building_pos_srs)
+        else:
+            if (building_pos_srs != self.srs):
+                transformCoord = True
+                transformation = osr.CoordinateTransformation(building_pos_srs, self.srs)
+
         # Create buildings and set their position and ID of the associated street using the the positin shapefile of the buildings
         for building in buildings_pos_layer:
 
@@ -87,7 +124,8 @@ class City:
 
             # Position
             building_geom = building.GetGeometryRef()
-            #transform_coordinate_to_WGS84(building_geom, building_pos_srs)
+            if (transformCoord):
+                building_geom.Transform(transformation)
             building_obj.setPosition((building_geom.GetX(), building_geom.GetY()))
 
             # Associated street ID
@@ -124,7 +162,14 @@ class City:
         buildings_vector = driver.Open(path, 0)
         buildings_layer = buildings_vector.GetLayer(0)
         building_srs = buildings_layer.GetSpatialRef()
-        self.srs = building_srs
+
+        transformCoord = False
+        if (self.srs == None):
+            self.setSRS(building_srs)
+        else:
+            if (building_srs != self.srs):
+                transformCoord = True
+                transformation = osr.CoordinateTransformation(building_srs, self.srs)
 
         # Set the geometry and area of the buildings
         for building in buildings_layer:
@@ -133,7 +178,8 @@ class City:
             building_geom = building.GetGeometryRef()
 
             # self.Buildings[buildingID].area = building_geom.Area()
-            #transform_coordinate_to_WGS84(building_geom, building_srs)
+            if (transformCoord):
+                building_geom.Transform(transformation)
             self.Buildings[buildingID].wtkGeometry = building_geom.ExportToWkt()
 
     def loadCensusAreasFromShapefile(self, path):
@@ -142,14 +188,22 @@ class City:
         c_areas_layer = c_areas_vector.GetLayer(0)
         c_areas_srs = c_areas_layer.GetSpatialRef()
 
+        transformCoord = False
+        if (self.srs == None):
+            self.setSRS(c_areas_srs)
+        else:
+            if (c_areas_srs != self.srs):
+                transformCoord = True
+                transformation = osr.CoordinateTransformation(c_areas_srs, self.srs)
+
         for c_area in c_areas_layer:
             cAreaID = c_area.GetField('SEZ')
             c_area_obj = CensusArea(cAreaID)
 
             c_area_geom = c_area.GetGeometryRef()
 
-            transformation = osr.CoordinateTransformation(c_areas_srs, self.srs)
-            c_area_geom.Transform(transformation)
+            if (transformCoord):
+                c_area_geom.Transform(transformation)
 
             c_area_obj.wtkGeometry = c_area_geom.ExportToWkt()
             c_area_obj.residents = c_area.GetField('P1')
@@ -170,18 +224,30 @@ class City:
                 for buildingID in c_area_obj.listOfBuildings:
                     self.Buildings[buildingID].nPeople=npeople
 
+            self.CensusAreas[cAreaID] = c_area_obj
+
     def loadWaitingAreasFromShapefile(self, path):
         driver = ogr.GetDriverByName("ESRI Shapefile")
         w_areas_pos_vector = driver.Open(path, 0)
         w_areas_pos_layer = w_areas_pos_vector.GetLayer(0)
         w_areas_srs = w_areas_pos_layer.GetSpatialRef()
 
+        transformCoord = False
+        if (self.srs == None):
+            self.setSRS(w_areas_srs)
+        else:
+            if (w_areas_srs != self.srs):
+                transformCoord = True
+                transformation = osr.CoordinateTransformation(w_areas_srs, self.srs)
+
+
         for w_area in w_areas_pos_layer:
             wAreaID = w_area.GetField('Id')
             w_area_obj = WaitingArea(wAreaID)  # new waiting area
 
             w_area_geom = w_area.GetGeometryRef()
-            #transform_coordinate_to_WGS84(w_area_geom, w_areas_srs)
+            if (transformCoord):
+                w_area_geom.Transform(transformation)
             w_area_obj.setPosition((w_area_geom.GetX(), w_area_geom.GetY()))
             # wAreaGeom = w_area.GetGeometryRef()
 
@@ -198,16 +264,45 @@ class City:
         w_areas_layer = w_areas_vector.GetLayer(0)
         w_areas_srs = w_areas_layer.GetSpatialRef()
 
+        transformCoord = False
+        if (self.srs == None):
+            self.setSRS(w_areas_srs)
+        else:
+            if (w_areas_srs != self.srs):
+                transformCoord = True
+                transformation = osr.CoordinateTransformation(w_areas_srs, self.srs)
+
         # Set the geometry and area of the areas
         for wArea in w_areas_layer:
             wAreaID = wArea.GetField('Id')
             w_area_geom = wArea.GetGeometryRef()
             # self.WaitingAreas[wAreaID].area = w_area_geom.Area()
-            #transform_coordinate_to_WGS84(w_area_geom, w_areas_srs)
+            if (transformCoord):
+                w_area_geom.Transform(transformation)
             self.WaitingAreas[wAreaID].wtkGeometry = w_area_geom.ExportToWkt()
 
     def getBuildingsFromStreetID(self, streetID):
         return City.Streets[streetID].listOfBuildings
+
+    def loadCityFromshapefiles(self, crossroads_path, streets_path, buildings_pos_path, buildings_path, waiting_areas_pos_path, waiting_areas_path, census_areas_path):
+        self.loadCrossroadsFromShapefile(crossroads_path)
+        self.loadStreetsFromShapefile(streets_path)
+        self.loadBuildingsFromShapefile(buildings_pos_path)
+        self.addBuildingsGeometryFromShapefile(buildings_path)
+
+        self.loadWaitingAreasFromShapefile(waiting_areas_pos_path)
+        self.addWaitingAreasGeometryFromShapefile(waiting_areas_path)
+
+        self.loadCensusAreasFromShapefile(census_areas_path)
+
+    #def loadCrossroadsFromOSMGraph(self,G):
+    #    for node, data in G.nodes(data=True):
+
+    #def loadStreetsFromOSMGraph(self,G):
+
+    #def loadCityfromOSM(self, namePlace):
+    #    OSMGraph = ox.graph_from_place(namePlace, network_type='all')
+    #    self.loadCrossroadsFromOSMGraph(OSMGraph)
 
     def plotCity(self):
         for building in self.Buildings:
@@ -293,6 +388,7 @@ class WaitingArea:
         self.wtkGeometry = None
         self.users_capacity = None
         self.residents_capacity = None
+        self.position = None
 
     def setPosition(self, coordinate):
         self.position = coordinate
@@ -301,7 +397,7 @@ class CensusArea:
     def __init__(self, id):
         self.ID = id
         self.wtkGeometry = None
-        self.area = None
+        #self.area = None
         self.residents = None
         self.nBuildings = 0
         self.listOfBuildings = []

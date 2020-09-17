@@ -18,13 +18,20 @@ def addEdge(G, type, object):
             points = object.divideStreetWithBuildings()
             if (points):
                 for i in range (0, len(points)-1):
-                    G.add_edge(str(points[i]), str(points[i+1]), edgeType = type, width = object.width, risk=object.risk)
+                    G.add_edge(str(points[i]), str(points[i+1]), edgeType = type, width = object.width, length = getDistance(points[i], points[i+1]), risk=object.risk)
 
 def buildingsToString(listOfBuildings):
     buildings = []
     for building in listOfBuildings:
         buildings.append(str(building.ID))
     return buildings
+
+def getDistance(point1,point2):
+    p1 = ogr.Geometry(ogr.wkbPoint)
+    p1.AddPoint(point1[0], point1[1])
+    p2 = ogr.Geometry(ogr.wkbPoint)
+    p2.AddPoint(point2[0], point2[1])
+    return  p1.Distance(p2)
 
 def plotCityGraph(Graph):
     # Plotting graph
@@ -49,40 +56,116 @@ def plotCityGraph(Graph):
     nx.draw_networkx_nodes(Graph, pos, nodelist=waiting_areas, node_size=5, node_color='#ffff99', node_shape='o')
 
     nx.draw_networkx_edges(Graph, pos, edgelist=Graph.edges())
-    plt.show()
 
-def loadCompleteGraph():
+    #plt.show()
+
+def createCompleteGraph(city):
     Graph = nx.Graph()
 
-    for crossroad in Sulmona.Crossroads:
-        addNode(Graph, 'crossroad', Sulmona.Crossroads[crossroad])
-    for building in Sulmona.Buildings:
-        addNode(Graph, 'building', Sulmona.Buildings[building])
-    for w_area in Sulmona.WaitingAreas:
-        addNode(Graph, 'waiting_area', Sulmona.WaitingAreas[w_area])
-    for street in Sulmona.Streets:
-        addEdge(Graph, 'street', Sulmona.Streets[street])
-        addEdge(Graph, 'halfstreet', Sulmona.Streets[street])
+    for crossroad in city.Crossroads:
+        addNode(Graph, 'crossroad', city.Crossroads[crossroad])
+    for building in city.Buildings:
+        addNode(Graph, 'building', city.Buildings[building])
+    for w_area in city.WaitingAreas:
+        addNode(Graph, 'waiting_area', city.WaitingAreas[w_area])
+    for street in city.Streets:
+        addEdge(Graph, 'street', city.Streets[street])
+        addEdge(Graph, 'halfstreet', city.Streets[street])
     return Graph
 
-def loadCrossroadsGraph():
+def createCrossroadsGraph(city):
     Graph = nx.Graph()
 
-    for crossroad in Sulmona.Crossroads:
-        addNode(Graph, 'crossroad', Sulmona.Crossroads[crossroad])
-    for street in Sulmona.Streets:
-        addEdge(Graph, 'street', Sulmona.Streets[street])
+    for crossroad in city.Crossroads:
+        addNode(Graph, 'crossroad', city.Crossroads[crossroad])
+    for street in city.Streets:
+        addEdge(Graph, 'street', city.Streets[street])
 
     return Graph
+
+def createReconstructionGraph(city):
+    Graph = nx.Graph()
+
+    for crossroad in city.Crossroads:
+        addNode(Graph, 'crossroad', city.Crossroads[crossroad])
+    for building in city.Buildings:
+        addNode(Graph, 'building', city.Buildings[building])
+    for street in city.Streets:
+        addEdge(Graph, 'street', city.Streets[street])
+        addEdge(Graph, 'halfstreet', city.Streets[street])
+
+    mapping = {}
+    nPrivateBuilding = 0
+    nBuildingUnderCostruction = 0
+    nAgriculturalBuilding = 0
+    nChurch = 0
+    nFactory = 0
+
+    for node, data in Graph.nodes(data=True):
+        if data['nodeType'] == 'building':
+            if data['buildingType'] == 'Edificio civile':
+                nPrivateBuilding = nPrivateBuilding + 1
+                mapping[node] = 'Private building '+str(nPrivateBuilding)
+            if data['buildingType'] == 'Edificio in costruzione':
+                nBuildingUnderCostruction = nBuildingUnderCostruction + 1
+                mapping[node] = 'Building under construction '+str(nBuildingUnderCostruction)
+            if data['buildingType'] == 'Edificio agroforestale, stalla, rimessa attrezzi agricoli':
+                nAgriculturalBuilding = nAgriculturalBuilding + 1
+                mapping[node] = 'Agricultural Building '+str(nAgriculturalBuilding)
+            if data['buildingType'] == 'Edificio di culto':
+                nChurch = nChurch + 1
+                mapping[node] = 'Church '+str(nChurch)
+            if data['buildingType'] == 'Stabilimento, opificio':
+                nFactory = nFactory + 1
+                mapping[node] = 'Factory '+str(nFactory)
+
+        else:
+            mapping [node] = node
+
+        RecGraph = nx.relabel_nodes(Graph, mapping)
+
+    return RecGraph
 
 def saveCityGraph(Graph, name):
     nx.write_adjlist(Graph, str(name)+'.adjlist')
     nx.write_gpickle(Graph, str(name)+'.gpickle')
 
-def loadCityGraph(name):
+def loadCityGraphFromGpickle(filepath):
     #G=nx.read_adjlist(str(name) + '.adjlist')
-    G=nx.read_gpickle(str(name) + '.gpickle')
+    G=nx.read_gpickle(filepath)
     return G
+
+def createAreaOfInterest(p1,p2,p3,p4):
+    # Create ring
+    ring = ogr.Geometry(ogr.wkbLinearRing)
+    ring.AddPoint(p1[0], p1[1])
+    ring.AddPoint(p2[0], p2[1])
+    ring.AddPoint(p3[0], p3[1])
+    ring.AddPoint(p4[0], p4[1])
+    ring.AddPoint(p1[0], p1[1])
+
+    # Create polygon
+    area = ogr.Geometry(ogr.wkbPolygon)
+    area.AddGeometry(ring)
+
+    return area
+
+def inTheAreaOfInterest(pos, area):
+    point = ogr.Geometry(ogr.wkbPoint)
+    point.AddPoint(pos[0],pos[1])
+    if point.Within(area):
+        return True
+    else:
+        return False
+
+def graphFromArea(G, area):
+    subnodes = []
+    for node, data in G.nodes(data=True):
+        if inTheAreaOfInterest(data['pos'], area):
+            subnodes.append(node)
+
+    return G.subgraph(subnodes)
+
 
 if __name__ == "__main__":
     Sulmona = City('Sulmona')
@@ -110,27 +193,31 @@ if __name__ == "__main__":
 
     Sulmona.loadCensusAreasFromShapefile(census_areas_path)
 
-    CompleteGraph=loadCompleteGraph()
-    CrossroadsGraph=loadCrossroadsGraph()
+    CompleteGraph = createCompleteGraph(Sulmona)
+    CrossroadsGraph = createCrossroadsGraph(Sulmona)
+    ReconstructionGraph = createReconstructionGraph(Sulmona)
 
     plotCityGraph(CompleteGraph)
     plotCityGraph(CrossroadsGraph)
+    #plotCityGraph(ReconstructionGraph)
 
     saveCityGraph(CompleteGraph, 'completeGraph')
     saveCityGraph(CrossroadsGraph, 'crossroadsGraph')
+    saveCityGraph(ReconstructionGraph, 'recostructionGraph')
 
     #print (CompleteGraph.number_of_edges())
     #print (CrossroadsGraph.number_of_edges())
     #G = loadCityGraph('crossroadsGraph')
 
-    G = nx.read_gpickle('completeGraph.gpickle')
-    for node, data in G.nodes(data=True):
-        if data['nodeType']== 'building':
-            print(node, data)
-    #for node in CompleteGraph.nodes(data=True):
+    #G = nx.read_gpickle('completeGraph.gpickle')
+    #for node, data in G.nodes(data=True):
+    #    if data['nodeType']== 'building':
+    #        print(node, data)
+
+    #for node in ReconstructionGraph.nodes(data=True):
     #    print(node)
-    #for edge in CompleteGraph.edges(data=True):
-     #   print(edge)
+    for edge in CompleteGraph.edges(data=True):
+        print(edge)
 
     print(CompleteGraph.number_of_nodes())
     print(CompleteGraph.number_of_edges())
